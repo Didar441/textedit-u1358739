@@ -173,7 +173,9 @@ class FindReplaceDialog(QDialog):
             import re
             content = self.editor.toPlainText()
             new_content = re.sub(re.escape(find_text), replace_text, content, flags=re.IGNORECASE)
-            self.editor.setPlainText(new_content)
+            if new_content != content:
+                self.editor.setPlainText(new_content)
+                self.editor.document().setModified(True)
 
 
 class TextEditor(QMainWindow):

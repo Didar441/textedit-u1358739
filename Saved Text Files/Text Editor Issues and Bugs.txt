@@ -5,7 +5,7 @@
 
 // Fixed  When first opening the text editor it goes off the screen a little until it is repositioned.
 // Fixed  When zooming in or out doesn't change the size of the line numbers and they look really bad.
-Can't delete files or folders in the side bar.
+// Fixed  Can't delete files or folders in the side bar.
 Can't drag and drop a file or folder into another folder in the side bar.
 // Fixed  Can't tell which folder I am in, in the side bar.
 // Fixed  No shortcuts for create folder and open folder.

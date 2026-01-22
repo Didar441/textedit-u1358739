@@ -612,7 +612,8 @@ class TextEditor(QMainWindow):
                     os.remove(file_path)
                 
                 # If we deleted the currently open file, close it
-                if self.current_file == file_path:
+                # Normalize paths for comparison (handle forward/back slashes)
+                if self.current_file and os.path.normpath(self.current_file) == os.path.normpath(file_path):
                     self.editor.clear()
                     self.current_file = None
                     self.setWindowTitle("TextEdit - Untitled")

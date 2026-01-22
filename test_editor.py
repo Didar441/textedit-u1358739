@@ -1793,89 +1793,258 @@ class TestFolderOperations:
         assert Path(window.file_model.rootPath()) == nested
 
 
+class TestDeleteFunctionality:
+     """Tests for delete file/folder functionality."""
+
+     def test_delete_file_from_tree(self, qtbot, tmp_path, monkeypatch):
+         window = TextEditor()
+         qtbot.addWidget(window)
+         window.show()
+         qtbot.waitExposed(window)
+         
+         # Create a test file
+         test_file = tmp_path / "test.txt"
+         test_file.write_text("test content")
+         
+         # Set the file tree to the tmp_path
+         window.file_model.setRootPath(str(tmp_path))
+         window.file_tree.setRootIndex(window.file_model.index(str(tmp_path)))
+         
+         # Get the index of the test file
+         file_index = window.file_model.index(str(test_file))
+         
+         # Mock QMessageBox.warning to confirm deletion
+         monkeypatch.setattr(
+             "main.QMessageBox.warning",
+             lambda *args, **kwargs: QMessageBox.Yes
+         )
+         
+         # Delete the file
+         window.delete_file_or_folder(file_index)
+         
+         # Verify the file is deleted
+         assert not test_file.exists()
+
+     def test_delete_folder_from_tree(self, qtbot, tmp_path, monkeypatch):
+         window = TextEditor()
+         qtbot.addWidget(window)
+         window.show()
+         qtbot.waitExposed(window)
+         
+         # Create a test folder with content
+         test_folder = tmp_path / "test_folder"
+         test_folder.mkdir()
+         (test_folder / "nested_file.txt").write_text("content")
+         
+         # Set the file tree to the tmp_path
+         window.file_model.setRootPath(str(tmp_path))
+         window.file_tree.setRootIndex(window.file_model.index(str(tmp_path)))
+         
+         # Get the index of the test folder
+         folder_index = window.file_model.index(str(test_folder))
+         
+         # Mock QMessageBox.warning to confirm deletion
+         monkeypatch.setattr(
+             "main.QMessageBox.warning",
+             lambda *args, **kwargs: QMessageBox.Yes
+         )
+         
+         # Delete the folder
+         window.delete_file_or_folder(folder_index)
+         
+         # Verify the folder is deleted
+         assert not test_folder.exists()
+
+     def test_delete_cancelled(self, qtbot, tmp_path, monkeypatch):
+         window = TextEditor()
+         qtbot.addWidget(window)
+         window.show()
+         qtbot.waitExposed(window)
+         
+         # Create a test file
+         test_file = tmp_path / "test.txt"
+         test_file.write_text("test content")
+         
+         # Set the file tree to the tmp_path
+         window.file_model.setRootPath(str(tmp_path))
+         window.file_tree.setRootIndex(window.file_model.index(str(tmp_path)))
+         
+         # Get the index of the test file
+         file_index = window.file_model.index(str(test_file))
+         
+         # Mock QMessageBox.warning to cancel deletion
+         monkeypatch.setattr(
+             "main.QMessageBox.warning",
+             lambda *args, **kwargs: QMessageBox.No
+         )
+         
+         # Try to delete the file
+         window.delete_file_or_folder(file_index)
+         
+         # Verify the file still exists
+         assert test_file.exists()
+         assert test_file.read_text() == "test content"
+
+     def test_delete_currently_open_file(self, qtbot, tmp_path, monkeypatch):
+         window = TextEditor()
+         qtbot.addWidget(window)
+         window.show()
+         qtbot.waitExposed(window)
+         
+         # Create and open a test file
+         test_file = tmp_path / "open_file.txt"
+         test_file.write_text("open content")
+         
+         # Simulate opening the file
+         window.load_file(str(test_file))
+         assert window.current_file == str(test_file)
+         assert "open_file.txt" in window.windowTitle()
+         
+         # Set the file tree to the tmp_path
+         window.file_model.setRootPath(str(tmp_path))
+         window.file_tree.setRootIndex(window.file_model.index(str(tmp_path)))
+         
+         # Get the index of the test file
+         file_index = window.file_model.index(str(test_file))
+         
+         # Mock QMessageBox.warning to confirm deletion
+         monkeypatch.setattr(
+             "main.QMessageBox.warning",
+             lambda *args, **kwargs: QMessageBox.Yes
+         )
+         
+         # Delete the file
+         window.delete_file_or_folder(file_index)
+         
+         # Verify the file is deleted and editor is cleared
+         assert not test_file.exists()
+         assert window.current_file is None
+         assert "Untitled" in window.windowTitle()
+         assert window.editor.toPlainText() == ""
+
+     def test_delete_nonexistent_file_error(self, qtbot, tmp_path, monkeypatch):
+         window = TextEditor()
+         qtbot.addWidget(window)
+         window.show()
+         qtbot.waitExposed(window)
+         
+         # Create a test file and immediately delete it
+         test_file = tmp_path / "will_delete.txt"
+         test_file.write_text("content")
+         
+         # Set the file tree to the tmp_path
+         window.file_model.setRootPath(str(tmp_path))
+         window.file_tree.setRootIndex(window.file_model.index(str(tmp_path)))
+         
+         # Get the index before deleting
+         file_index = window.file_model.index(str(test_file))
+         
+         # Delete the file manually
+         test_file.unlink()
+         
+         # Mock QMessageBox.warning to confirm deletion
+         monkeypatch.setattr(
+             "main.QMessageBox.warning",
+             lambda *args, **kwargs: QMessageBox.Yes
+         )
+         
+         # Mock QMessageBox.critical to check error handling
+         error_called = []
+         monkeypatch.setattr(
+             "main.QMessageBox.critical",
+             lambda *args, **kwargs: error_called.append(True)
+         )
+         
+         # Try to delete (should fail gracefully)
+         window.delete_file_or_folder(file_index)
+         
+         # Verify error was shown
+         assert len(error_called) == 1
+
+
 class TestEdgesCases:
-    """Tests for edge cases and error handling."""
+     """Tests for edge cases and error handling."""
 
-    def test_empty_file_save_load(self, qtbot, tmp_path):
-        window = TextEditor()
-        qtbot.addWidget(window)
-        
-        file_path = tmp_path / "empty.txt"
-        window.save_to_file(str(file_path))
-        
-        assert file_path.exists()
-        assert file_path.read_text(encoding='utf-8') == ""
-        
-        window.editor.setPlainText("not empty")
-        window.load_file(str(file_path))
-        assert window.editor.toPlainText() == ""
+     def test_empty_file_save_load(self, qtbot, tmp_path):
+         window = TextEditor()
+         qtbot.addWidget(window)
+         
+         file_path = tmp_path / "empty.txt"
+         window.save_to_file(str(file_path))
+         
+         assert file_path.exists()
+         assert file_path.read_text(encoding='utf-8') == ""
+         
+         window.editor.setPlainText("not empty")
+         window.load_file(str(file_path))
+         assert window.editor.toPlainText() == ""
 
-    def test_very_long_line(self, qtbot):
-        editor = CodeEditor()
-        qtbot.addWidget(editor)
-        
-        long_line = "x" * 10000
-        editor.setPlainText(long_line)
-        
-        assert len(editor.toPlainText()) == 10000
+     def test_very_long_line(self, qtbot):
+         editor = CodeEditor()
+         qtbot.addWidget(editor)
+         
+         long_line = "x" * 10000
+         editor.setPlainText(long_line)
+         
+         assert len(editor.toPlainText()) == 10000
 
-    def test_rapid_typing(self, qtbot):
-        window = TextEditor()
-        qtbot.addWidget(window)
-        window.show()
-        qtbot.waitExposed(window)
-        
-        window.editor.setFocus()
-        for char in "Hello World":
-            qtbot.keyClicks(window.editor, char)
-        
-        assert "Hello World" in window.editor.toPlainText()
+     def test_rapid_typing(self, qtbot):
+         window = TextEditor()
+         qtbot.addWidget(window)
+         window.show()
+         qtbot.waitExposed(window)
+         
+         window.editor.setFocus()
+         for char in "Hello World":
+             qtbot.keyClicks(window.editor, char)
+         
+         assert "Hello World" in window.editor.toPlainText()
 
-    def test_cursor_at_end_of_document(self, qtbot):
-        editor = CodeEditor()
-        qtbot.addWidget(editor)
-        editor.setPlainText("Line 1\nLine 2\nLine 3")
-        
-        cursor = editor.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        editor.setTextCursor(cursor)
-        
-        assert editor.textCursor().atEnd()
+     def test_cursor_at_end_of_document(self, qtbot):
+         editor = CodeEditor()
+         qtbot.addWidget(editor)
+         editor.setPlainText("Line 1\nLine 2\nLine 3")
+         
+         cursor = editor.textCursor()
+         cursor.movePosition(QTextCursor.End)
+         editor.setTextCursor(cursor)
+         
+         assert editor.textCursor().atEnd()
 
-    def test_cursor_at_start_of_document(self, qtbot):
-        editor = CodeEditor()
-        qtbot.addWidget(editor)
-        editor.setPlainText("Line 1\nLine 2")
-        
-        cursor = editor.textCursor()
-        cursor.movePosition(QTextCursor.Start)
-        editor.setTextCursor(cursor)
-        
-        assert editor.textCursor().atStart()
+     def test_cursor_at_start_of_document(self, qtbot):
+         editor = CodeEditor()
+         qtbot.addWidget(editor)
+         editor.setPlainText("Line 1\nLine 2")
+         
+         cursor = editor.textCursor()
+         cursor.movePosition(QTextCursor.Start)
+         editor.setTextCursor(cursor)
+         
+         assert editor.textCursor().atStart()
 
-    def test_whitespace_only_content(self, qtbot, tmp_path):
-        window = TextEditor()
-        qtbot.addWidget(window)
-        
-        whitespace = "   \n\t\n   \n"
-        window.editor.setPlainText(whitespace)
-        
-        file_path = tmp_path / "whitespace.txt"
-        window.save_to_file(str(file_path))
-        
-        window.load_file(str(file_path))
-        assert window.editor.toPlainText() == whitespace
+     def test_whitespace_only_content(self, qtbot, tmp_path):
+         window = TextEditor()
+         qtbot.addWidget(window)
+         
+         whitespace = "   \n\t\n   \n"
+         window.editor.setPlainText(whitespace)
+         
+         file_path = tmp_path / "whitespace.txt"
+         window.save_to_file(str(file_path))
+         
+         window.load_file(str(file_path))
+         assert window.editor.toPlainText() == whitespace
 
-    def test_newline_only_file(self, qtbot, tmp_path):
-        window = TextEditor()
-        qtbot.addWidget(window)
-        
-        newlines = "\n\n\n\n\n"
-        window.editor.setPlainText(newlines)
-        
-        file_path = tmp_path / "newlines.txt"
-        window.save_to_file(str(file_path))
-        
-        window.load_file(str(file_path))
-        assert window.editor.toPlainText() == newlines
-        assert window.editor.blockCount() == 6
+     def test_newline_only_file(self, qtbot, tmp_path):
+         window = TextEditor()
+         qtbot.addWidget(window)
+         
+         newlines = "\n\n\n\n\n"
+         window.editor.setPlainText(newlines)
+         
+         file_path = tmp_path / "newlines.txt"
+         window.save_to_file(str(file_path))
+         
+         window.load_file(str(file_path))
+         assert window.editor.toPlainText() == newlines
+         assert window.editor.blockCount() == 6

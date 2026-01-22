@@ -278,6 +278,7 @@ class TextEditor(QMainWindow):
         file_menu.addAction(new_action)
         
         new_folder_action = QAction("New &Folder...", self)
+        new_folder_action.setShortcut("Ctrl+Shift+N")
         new_folder_action.triggered.connect(self.new_folder)
         file_menu.addAction(new_folder_action)
         
@@ -289,6 +290,7 @@ class TextEditor(QMainWindow):
         file_menu.addAction(open_action)
         
         open_folder_action = QAction("Open Fol&der...", self)
+        open_folder_action.setShortcut("Ctrl+Shift+O")
         open_folder_action.triggered.connect(self.open_folder)
         file_menu.addAction(open_folder_action)
         

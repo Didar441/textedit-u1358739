@@ -718,12 +718,51 @@ class TextEditor(QMainWindow):
                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
             )
             if ret == QMessageBox.Save:
-                if self.save_current_file():
+                if self.save_tab_file(index, editor):
                     self.remove_tab(index)
             elif ret == QMessageBox.Discard:
                 self.remove_tab(index)
         else:
             self.remove_tab(index)
+    
+    def save_tab_file(self, index, editor):
+        """Save the file for a specific tab (may not be the current tab)."""
+        # Find the file path for this tab
+        file_path = None
+        for path, tab_idx in self.open_files.items():
+            if tab_idx == index:
+                file_path = path
+                break
+        
+        if file_path:
+            # Tab has an associated file, save to it
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(editor.toPlainText())
+                editor.document().setModified(False)
+                return True
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Could not save file:\n{e}")
+                return False
+        else:
+            # Untitled tab - need to show Save As dialog
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "Save File", "",
+                "All Files (*);;Text Files (*.txt);;Python Files (*.py)"
+            )
+            if file_path:
+                try:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(editor.toPlainText())
+                    editor.document().setModified(False)
+                    # Track the new file
+                    self.open_files[file_path] = index
+                    self.tab_widget.setTabText(index, os.path.basename(file_path))
+                    return True
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Could not save file:\n{e}")
+                    return False
+            return False
     
     def remove_tab(self, index):
         """Remove a tab without prompting."""

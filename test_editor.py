@@ -2169,3 +2169,322 @@ class TestTabs:
          window.load_file(str(test_file2))
          assert str(test_file2) in window.open_files
          assert len(window.open_files) == 2
+
+
+class TestMultiTabFunctionality:
+    """Comprehensive tests for multi-tab functionality."""
+
+    def test_new_file_creates_new_tab(self, qtbot):
+        """Test that new_file creates a new tab."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        initial_count = window.tab_widget.count()
+
+        window.new_file()
+
+        assert window.tab_widget.count() == initial_count + 1
+        assert "Untitled" in window.tab_widget.tabText(window.tab_widget.currentIndex())
+
+    def test_each_tab_has_independent_editor(self, qtbot):
+        """Test that each tab has its own independent editor."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+
+        editor1 = window.tab_widget.widget(0)
+        editor1.setPlainText("Tab 1 content")
+
+        window.create_new_tab()
+        editor2 = window.tab_widget.widget(1)
+        editor2.setPlainText("Tab 2 content")
+
+        assert editor1 is not editor2
+        assert editor1.toPlainText() == "Tab 1 content"
+        assert editor2.toPlainText() == "Tab 2 content"
+
+    def test_tab_switch_updates_current_editor(self, qtbot):
+        """Test that switching tabs updates the current editor reference."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+
+        editor1 = window.tab_widget.widget(0)
+        editor1.setPlainText("First tab")
+
+        window.create_new_tab()
+        editor2 = window.tab_widget.widget(1)
+        editor2.setPlainText("Second tab")
+
+        window.tab_widget.setCurrentIndex(0)
+        qtbot.wait(50)
+        assert window.editor is editor1
+
+        window.tab_widget.setCurrentIndex(1)
+        qtbot.wait(50)
+        assert window.editor is editor2
+
+    def test_tab_switch_updates_window_title(self, qtbot, tmp_path):
+        """Test that switching tabs updates the window title."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+
+        file1 = tmp_path / "file1.txt"
+        file1.write_text("content1")
+        window.load_file(str(file1))
+
+        window.create_new_tab()
+        file2 = tmp_path / "file2.txt"
+        file2.write_text("content2")
+        window.load_file(str(file2))
+
+        window.tab_widget.setCurrentIndex(0)
+        qtbot.wait(50)
+        assert "file1.txt" in window.windowTitle()
+
+        window.tab_widget.setCurrentIndex(1)
+        qtbot.wait(50)
+        assert "file2.txt" in window.windowTitle()
+
+    def test_close_tab_removes_from_open_files(self, qtbot, tmp_path, monkeypatch):
+        """Test that closing a tab removes file from open_files tracking."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("content")
+        window.load_file(str(test_file))
+
+        assert str(test_file) in window.open_files
+
+        monkeypatch.setattr(
+            "main.QMessageBox.warning",
+            lambda *args, **kwargs: QMessageBox.Discard
+        )
+
+        window.close_tab(window.tab_widget.currentIndex())
+
+        assert str(test_file) not in window.open_files
+
+    def test_close_tab_updates_remaining_indices(self, qtbot, tmp_path, monkeypatch):
+        """Test that closing a tab updates indices for remaining tabs."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+
+        files = []
+        for i in range(3):
+            f = tmp_path / f"file{i}.txt"
+            f.write_text(f"content{i}")
+            files.append(f)
+            if i == 0:
+                window.load_file(str(f))
+            else:
+                window.create_new_tab()
+                window.load_file(str(f))
+
+        window.tab_widget.setCurrentIndex(1)
+        monkeypatch.setattr(
+            "main.QMessageBox.warning",
+            lambda *args, **kwargs: QMessageBox.Discard
+        )
+        window.close_tab(1)
+
+        assert window.tab_widget.count() == 2
+
+    def test_close_all_tabs_shows_welcome_or_empty(self, qtbot, monkeypatch):
+        """Test behavior when all tabs are closed."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+
+        monkeypatch.setattr(
+            "main.QMessageBox.warning",
+            lambda *args, **kwargs: QMessageBox.Discard
+        )
+
+        window.close_tab(0)
+
+        assert window.tab_widget.count() == 0
+
+    def test_modified_indicator_cleared_on_save(self, qtbot, tmp_path):
+        """Test that asterisk is removed from tab title after save."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+
+        window.editor.setPlainText("modified content")
+        qtbot.wait(50)
+
+        assert "*" in window.tab_widget.tabText(0)
+
+        file_path = tmp_path / "saved.txt"
+        window.save_to_file(str(file_path))
+
+        tab_text = window.tab_widget.tabText(0)
+        assert "*" not in tab_text
+        assert "saved.txt" in tab_text
+
+    def test_tab_close_button_emits_signal(self, qtbot):
+        """Test that tab close button emits the correct signal."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+
+        signal_received = []
+        window.tab_widget.close_requested.connect(lambda idx: signal_received.append(idx))
+
+        window.tab_widget.tab_bar.close_requested.emit(0)
+
+        assert len(signal_received) == 1
+        assert signal_received[0] == 0
+
+    def test_reuse_untitled_tab_when_loading_file(self, qtbot, tmp_path):
+        """Test that loading a file reuses an empty untitled tab."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+
+        initial_count = window.tab_widget.count()
+        assert initial_count == 1
+        assert window.tab_widget.tabText(0) == "Untitled"
+
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("content")
+        window.load_file(str(test_file))
+
+        assert window.tab_widget.count() == 1
+        assert "test.txt" in window.tab_widget.tabText(0)
+
+    def test_create_new_tab_when_current_modified(self, qtbot, tmp_path):
+        """Test that loading a file creates new tab when current is modified."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+
+        window.editor.setPlainText("unsaved changes")
+        window.editor.document().setModified(True)
+
+        initial_count = window.tab_widget.count()
+
+        test_file = tmp_path / "new_file.txt"
+        test_file.write_text("file content")
+        window.load_file(str(test_file))
+
+        assert window.tab_widget.count() == initial_count + 1
+
+    def test_cancel_close_keeps_tab_open(self, qtbot, monkeypatch):
+        """Test that cancelling close keeps the tab open."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+
+        window.editor.setPlainText("unsaved content")
+        window.editor.document().setModified(True)
+
+        monkeypatch.setattr(
+            "main.QMessageBox.warning",
+            lambda *args, **kwargs: QMessageBox.Cancel
+        )
+
+        initial_count = window.tab_widget.count()
+        window.close_tab(0)
+
+        assert window.tab_widget.count() == initial_count
+
+    def test_save_on_close_tab(self, qtbot, tmp_path, monkeypatch):
+        """Test saving when closing a tab with unsaved changes."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+
+        window.editor.setPlainText("content to save")
+        window.editor.document().setModified(True)
+
+        monkeypatch.setattr(
+            "main.QMessageBox.warning",
+            lambda *args, **kwargs: QMessageBox.Save
+        )
+
+        save_path = str(tmp_path / "saved_on_close.txt")
+        monkeypatch.setattr(
+            "main.QFileDialog.getSaveFileName",
+            lambda *args, **kwargs: (save_path, "All Files (*)")
+        )
+
+        window.close_tab(0)
+
+        assert (tmp_path / "saved_on_close.txt").exists()
+        assert (tmp_path / "saved_on_close.txt").read_text() == "content to save"
+
+    def test_multiple_tabs_cursor_position_independent(self, qtbot):
+        """Test that cursor position is independent between tabs."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+
+        editor1 = window.tab_widget.widget(0)
+        editor1.setPlainText("Line 1\nLine 2\nLine 3")
+        cursor1 = editor1.textCursor()
+        cursor1.movePosition(QTextCursor.End)
+        editor1.setTextCursor(cursor1)
+
+        window.create_new_tab()
+        editor2 = window.tab_widget.widget(1)
+        editor2.setPlainText("A\nB")
+        cursor2 = editor2.textCursor()
+        cursor2.movePosition(QTextCursor.Start)
+        editor2.setTextCursor(cursor2)
+
+        assert editor1.textCursor().blockNumber() == 2
+        assert editor2.textCursor().blockNumber() == 0
+
+    def test_save_untitled_tab_when_not_current_shows_save_dialog(self, qtbot, tmp_path, monkeypatch):
+        """Test that saving an untitled modified tab shows save dialog even when it's not the current tab.
+        
+        Bug: When you modify untitled tab, open another file, then close the untitled tab
+        and click Save, the save dialog should appear but it doesn't - the file is lost.
+        """
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Modify the untitled first tab
+        editor1 = window.tab_widget.widget(0)
+        editor1.setPlainText("unsaved content in untitled")
+        editor1.document().setModified(True)
+        
+        # Open another file (this becomes the current tab)
+        test_file = tmp_path / "existing.txt"
+        test_file.write_text("existing content")
+        window.load_file(str(test_file))
+        
+        # Verify we're now on the second tab (index 1)
+        assert window.tab_widget.currentIndex() == 1
+        assert window.current_file == str(test_file)
+        
+        # Now close the untitled tab (index 0) - it has unsaved changes
+        # Mock the warning dialog to return Save
+        monkeypatch.setattr(
+            "main.QMessageBox.warning",
+            lambda *args, **kwargs: QMessageBox.Save
+        )
+        
+        # Track if save dialog was shown
+        save_dialog_shown = []
+        save_path = str(tmp_path / "saved_untitled.txt")
+        def mock_get_save_filename(*args, **kwargs):
+            save_dialog_shown.append(True)
+            return (save_path, "All Files (*)")
+        
+        monkeypatch.setattr(
+            "main.QFileDialog.getSaveFileName",
+            mock_get_save_filename
+        )
+        
+        # Close the untitled tab (index 0)
+        window.close_tab(0)
+        
+        # The save dialog SHOULD have been shown
+        assert len(save_dialog_shown) == 1, "Save dialog was not shown for untitled file"
+        
+        # The file should have been saved
+        assert (tmp_path / "saved_untitled.txt").exists(), "File was not saved"
+        assert (tmp_path / "saved_untitled.txt").read_text() == "unsaved content in untitled"

@@ -111,34 +111,36 @@ class CustomTabWidget(QTabWidget):
         self.split_button.clicked.connect(self.split_requested.emit)
         self.split_button.setStyleSheet("""
             QPushButton {
-                background-color: transparent;
+                background-color: #4a4a4d;
                 border: none;
-            }
-            QPushButton:hover {
-                background-color: #3e3e42;
                 border-radius: 3px;
             }
+            QPushButton:hover {
+                background-color: #5a5a5d;
+            }
             QPushButton:disabled {
-                opacity: 0.3;
+                background-color: #3a3a3d;
             }
         """)
         self.setCornerWidget(self.split_button, Qt.TopRightCorner)
         
         self.setStyleSheet("""
             QTabBar::tab {
-                background-color: #2d2d30;
-                color: #cccccc;
+                background-color: #1e1e1e;
+                color: #888888;
                 padding: 6px 12px;
                 border: 1px solid #3e3e42;
                 border-bottom: none;
                 margin-right: 2px;
             }
             QTabBar::tab:selected {
-                background-color: #1e1e1e;
+                background-color: #2d2d30;
+                color: #ffffff;
                 border-bottom: 2px solid #0ea5e9;
             }
             QTabBar::tab:hover {
                 background-color: #323232;
+                color: #cccccc;
             }
             QTabWidget::pane {
                 border: none;
@@ -160,10 +162,16 @@ class SplitEditorPane(QWidget):
     tab_close_requested = Signal(object, int)
     tab_changed = Signal(object, int)
     split_requested = Signal()
+    pane_activated = Signal(object)
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.init_ui()
+    
+    def mousePressEvent(self, event):
+        """Emit pane_activated when the pane is clicked."""
+        self.pane_activated.emit(self)
+        super().mousePressEvent(event)
     
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -171,14 +179,15 @@ class SplitEditorPane(QWidget):
         layout.setSpacing(0)
         
         # Header with file name and close button
-        header = QWidget()
-        header.setStyleSheet("background-color: #2d2d30;")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(5, 2, 5, 2)
+        self.header = QWidget()
+        self.header.setFixedHeight(24)
+        self.header.setStyleSheet("background-color: #2d2d30;")
+        header_layout = QHBoxLayout(self.header)
+        header_layout.setContentsMargins(5, 0, 5, 0)
         header_layout.setSpacing(5)
         
         self.file_label = QLabel("Untitled")
-        self.file_label.setStyleSheet("color: #cccccc; font-weight: bold;")
+        self.file_label.setStyleSheet("color: #cccccc; font-weight: bold; font-size: 11px;")
         header_layout.addWidget(self.file_label)
         
         header_layout.addStretch()
@@ -186,21 +195,22 @@ class SplitEditorPane(QWidget):
         self.close_button = QPushButton()
         self.close_button.setIcon(self.style().standardIcon(QStyle.SP_TitleBarCloseButton))
         self.close_button.setToolTip("Close Split")
-        self.close_button.setFixedSize(24, 24)
+        self.close_button.setFixedSize(16, 16)
+        self.close_button.setIconSize(QSize(12, 12))
         self.close_button.clicked.connect(lambda: self.close_pane_requested.emit(self))
         self.close_button.setStyleSheet("""
             QPushButton {
-                background-color: transparent;
+                background-color: #4a4a4d;
                 border: none;
+                border-radius: 3px;
             }
             QPushButton:hover {
                 background-color: #c42b1c;
-                border-radius: 3px;
             }
         """)
         header_layout.addWidget(self.close_button)
         
-        layout.addWidget(header)
+        layout.addWidget(self.header)
         
         # Tab widget for this pane
         self.tab_widget = CustomTabWidget()
@@ -219,6 +229,9 @@ class SplitEditorPane(QWidget):
     
     def update_file_label(self, text):
         self.file_label.setText(text)
+    
+    def set_header_visible(self, visible):
+        self.header.setVisible(visible)
 
 
 class LineNumberArea(QWidget):
@@ -400,6 +413,7 @@ class TextEditor(QMainWindow):
          self.current_file = None
          self.open_files = {}  # Maps file path to (pane, tab_index)
          self.file_modified_state = {}  # Tracks if each file is modified
+         self.saved_content = {}  # Maps (pane, tab_index) to saved content for comparison
          self.zoom_indicator_timer = QTimer()
          self.zoom_indicator_timer.timeout.connect(self.hide_zoom_indicator)
          self.split_panes = []  # List of SplitEditorPane objects
@@ -692,7 +706,7 @@ class TextEditor(QMainWindow):
                 color: white;
             }
             QScrollBar:vertical {
-                background-color: #1e1e1e;
+                background-color: #252526;
                 width: 14px;
                 margin: 0;
             }
@@ -708,7 +722,7 @@ class TextEditor(QMainWindow):
                 height: 0;
             }
             QScrollBar:horizontal {
-                background-color: #1e1e1e;
+                background-color: #252526;
                 height: 14px;
                 margin: 0;
             }
@@ -758,6 +772,7 @@ class TextEditor(QMainWindow):
         pane.tab_close_requested.connect(self.close_tab_in_pane)
         pane.tab_changed.connect(self.on_pane_tab_changed)
         pane.split_requested.connect(self.add_split_view)
+        pane.pane_activated.connect(self.set_active_pane)
         pane.welcome_screen.open_file_clicked.connect(self.open_file)
         pane.welcome_screen.new_file_clicked.connect(self.new_file_without_tab_check)
         
@@ -909,6 +924,9 @@ class TextEditor(QMainWindow):
         if self.tab_widget.isHidden():
             self.tab_widget.show()
             self.welcome_screen.hide()
+            # Show header again
+            if self.active_pane:
+                self.active_pane.set_header_visible(True)
         
         index = self.tab_widget.addTab(editor, tab_name)
         if file_path:
@@ -1064,8 +1082,9 @@ class TextEditor(QMainWindow):
                 self.welcome_screen.show()
                 self.current_file = None
                 self.setWindowTitle("TextEdit")
+                # Hide the header when showing welcome screen
                 if self.active_pane:
-                    self.active_pane.update_file_label("No file")
+                    self.active_pane.set_header_visible(False)
     
     def save_current_file(self):
         """Save the current file."""
@@ -1285,8 +1304,11 @@ class TextEditor(QMainWindow):
             editor.setPlainText(content)
             editor.document().setModified(False)
             
-            # Update tab title
+            # Store saved content for comparison
             tab_index = self.tab_widget.currentIndex()
+            self.saved_content[(self.active_pane, tab_index)] = content
+            
+            # Update tab title
             tab_name = os.path.basename(file_path)
             self.tab_widget.setTabText(tab_index, tab_name)
             
@@ -1318,19 +1340,23 @@ class TextEditor(QMainWindow):
     
     def save_to_file(self, file_path):
         try:
+            content = self.editor.toPlainText()
             with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(self.editor.toPlainText())
+                f.write(content)
             
             # Update open_files mapping if new file
             if file_path not in self.open_files:
                 self.open_files[file_path] = (self.active_pane, self.tab_widget.currentIndex())
+            
+            # Store saved content for comparison
+            tab_index = self.tab_widget.currentIndex()
+            self.saved_content[(self.active_pane, tab_index)] = content
             
             self.current_file = file_path
             self.setWindowTitle(f"TextEdit - {file_path}")
             self.editor.document().setModified(False)
             
             # Update tab title to remove asterisk
-            tab_index = self.tab_widget.currentIndex()
             tab_name = os.path.basename(file_path)
             self.tab_widget.setTabText(tab_index, tab_name)
             
@@ -1359,12 +1385,21 @@ class TextEditor(QMainWindow):
     
     def on_text_changed(self):
         """Update title and tab when text changes."""
+        # Check if current content matches saved content
+        tab_index = self.tab_widget.currentIndex()
+        key = (self.active_pane, tab_index)
+        if key in self.saved_content:
+            current_content = self.editor.toPlainText()
+            if current_content == self.saved_content[key]:
+                self.editor.document().setModified(False)
+        
         title = self.windowTitle()
         if not title.endswith("*") and self.editor.document().isModified():
             self.setWindowTitle(title + " *")
+        elif title.endswith(" *") and not self.editor.document().isModified():
+            self.setWindowTitle(title[:-2])
         
         # Update tab title with asterisk
-        tab_index = self.tab_widget.currentIndex()
         if tab_index >= 0:
             tab_title = self.tab_widget.tabText(tab_index)
             if self.editor.document().isModified() and not tab_title.endswith("*"):
@@ -1388,7 +1423,7 @@ class TextEditor(QMainWindow):
     
     def update_folder_label(self, folder_path):
         folder_name = os.path.basename(folder_path) or folder_path
-        self.folder_label.setText(f"ðŸ“ {folder_name}")
+        self.folder_label.setText(folder_name)
     
     def update_file_type(self, file_path):
         ext = file_path.split('.')[-1].lower() if '.' in file_path else ''

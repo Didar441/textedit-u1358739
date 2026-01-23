@@ -1,0 +1,1 @@
+I have a file named "All Current Problems.txt" inside the folder named "Saved Text FIles".  Each line in that file is a description of something that I want changed.  I want you to go through that file and fix each of those things one by one.  If the line starts with "Bug: " then I want you to follow that process I mentioned earlier for fixing bugs.

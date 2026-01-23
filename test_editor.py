@@ -3169,6 +3169,74 @@ class TestMultiFileSearchBugFix:
             window.close()
 
 
+class TestMultiViewSaveFile:
+    """Tests for save file behavior with multiple views."""
+    
+    def test_save_file_after_closing_extra_views(self, qtbot, tmp_path, monkeypatch):
+        """Test that save works correctly after closing extra views.
+        
+        Bug: When multiple views are open and you close all but the first,
+        then make a change and save, it asks for a new filename instead of
+        saving to the existing file.
+        """
+        # Create a test file
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("original content")
+        
+        # Create editor window
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Open the test file in first pane
+        window.load_file(str(test_file))
+        assert window.current_file == str(test_file)
+        first_pane = window.active_pane
+        
+        # Create a second view (this will create an untitled tab in the new pane)
+        # This is the key: creating a new split pane calls add_split_view which
+        # creates a new untitled tab, which sets current_file = None
+        window.add_split_view()
+        assert len(window.split_panes) == 2
+        second_pane = window.split_panes[1]
+        
+        # At this point, current_file should be None because we just created an untitled tab
+        # This is the bug!
+        assert window.current_file is None, f"After creating new pane with untitled tab, current_file should be None but is {window.current_file}"
+        
+        # Close the second pane (which is the active pane)
+        window.close_split_pane(second_pane)
+        assert len(window.split_panes) == 1
+        
+        # Now we should be back at the first pane with the test file
+        assert window.active_pane == first_pane
+        
+        # After the fix, current_file should be restored to the test file
+        assert window.current_file == str(test_file), f"After closing second pane, current_file should be {test_file} but is {window.current_file}"
+        
+        # Make a change to the file
+        window.editor.setPlainText("modified content")
+        
+        # Mock QFileDialog.getSaveFileName to detect if save-as is triggered
+        save_as_called = []
+        original_getSaveFileName = QFileDialog.getSaveFileName
+        
+        def mock_getSaveFileName(*args, **kwargs):
+            save_as_called.append(True)
+            return original_getSaveFileName(*args, **kwargs)
+        
+        monkeypatch.setattr("main.QFileDialog.getSaveFileName", mock_getSaveFileName)
+        
+        # Try to save - should NOT trigger save-as dialog
+        window.save_file()
+        
+        # Verify the file was saved with the new content
+        assert test_file.read_text() == "modified content", f"File should contain 'modified content' but contains '{test_file.read_text()}'"
+        # Verify save-as was NOT triggered
+        assert len(save_as_called) == 0, "Save should use existing filename, not trigger save-as"
+
+
 class TestSplitViewButton:
     """Tests for split view button tooltip."""
     

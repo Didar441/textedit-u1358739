@@ -1173,6 +1173,10 @@ class TextEditor(QMainWindow):
             self.welcome_screen = self.active_pane.welcome_screen
             if self.tab_widget.count() > 0:
                 self.editor = self.tab_widget.currentWidget()
+                # Update current_file to reflect the file in the new active pane's current tab
+                current_index = self.tab_widget.currentIndex()
+                if current_index >= 0:
+                    self.on_tab_changed(current_index)
         
         # Remove widget
         pane.setParent(None)

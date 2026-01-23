@@ -1069,7 +1069,7 @@ class TextEditor(QMainWindow):
     
     def update_folder_label(self, folder_path):
         folder_name = os.path.basename(folder_path) or folder_path
-        self.folder_label.setText(f"📁 {folder_name}")
+        self.folder_label.setText(f"ðŸ“ {folder_name}")
     
     def update_file_type(self, file_path):
         ext = file_path.split('.')[-1].lower() if '.' in file_path else ''
@@ -1150,10 +1150,10 @@ class TextEditor(QMainWindow):
             "TextEdit - A VS Code-like Text Editor\n\n"
             "Built with Python and PySide6\n\n"
             "Features:\n"
-            "• Syntax highlighting line numbers\n"
-            "• File explorer sidebar\n"
-            "• Find and replace\n"
-            "• Dark theme"
+            "â€¢ Syntax highlighting line numbers\n"
+            "â€¢ File explorer sidebar\n"
+            "â€¢ Find and replace\n"
+            "â€¢ Dark theme"
         )
     
     def closeEvent(self, event):

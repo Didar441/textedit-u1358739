@@ -597,7 +597,7 @@ class TestFileOperations:
         window = TextEditor()
         qtbot.addWidget(window)
         
-        unicode_content = "Hello 世界 🌍 Привет"
+        unicode_content = "Hello ä¸–ç•Œ ðŸŒ ÐŸÑ€Ð¸Ð²ÐµÑ‚"
         window.editor.setPlainText(unicode_content)
         
         file_path = tmp_path / "unicode.txt"
@@ -609,7 +609,7 @@ class TestFileOperations:
         window = TextEditor()
         qtbot.addWidget(window)
         
-        unicode_content = "Hello 世界 🌍 Привет"
+        unicode_content = "Hello ä¸–ç•Œ ðŸŒ ÐŸÑ€Ð¸Ð²ÐµÑ‚"
         file_path = tmp_path / "unicode.txt"
         file_path.write_text(unicode_content, encoding='utf-8')
         
@@ -1435,7 +1435,7 @@ class TestFolderLabelDisplay:
         
         folder_text = window.folder_label.text()
         assert len(folder_text) > 0
-        assert "📁" in folder_text
+        assert "ðŸ“" in folder_text
 
     def test_update_folder_label_with_simple_path(self, qtbot):
         window = TextEditor()
@@ -1445,7 +1445,7 @@ class TestFolderLabelDisplay:
         window.update_folder_label(test_path)
         
         assert "Documents" in window.folder_label.text()
-        assert "📁" in window.folder_label.text()
+        assert "ðŸ“" in window.folder_label.text()
 
     def test_update_folder_label_with_nested_path(self, qtbot, tmp_path):
         window = TextEditor()
@@ -1464,7 +1464,7 @@ class TestFolderLabelDisplay:
         
         window.update_folder_label("/")
         
-        assert window.folder_label.text() == "📁 /"
+        assert window.folder_label.text() == "ðŸ“ /"
 
     def test_folder_label_updates_on_open_folder(self, qtbot, tmp_path, monkeypatch):
         window = TextEditor()

@@ -308,6 +308,9 @@ class TextEditor(QMainWindow):
          self.zoom_indicator_timer.timeout.connect(self.hide_zoom_indicator)
          self.init_ui()
          self.apply_dark_theme()
+         # Focus on editor so user can start typing immediately
+         if self.editor:
+             self.editor.setFocus()
     
     def init_ui(self):
         self.setWindowTitle("TextEdit - Untitled")
@@ -676,6 +679,8 @@ class TextEditor(QMainWindow):
         self.tab_widget.setCurrentIndex(index)
         self.current_file = file_path
         self.editor = editor
+        # Focus on editor so user can start typing immediately
+        editor.setFocus()
         return editor, file_path
     
     def on_tab_changed(self, index):
@@ -984,6 +989,8 @@ class TextEditor(QMainWindow):
             self.current_file = file_path
             self.setWindowTitle(f"TextEdit - {file_path}")
             self.update_file_type(file_path)
+            # Focus on editor so user can start typing immediately
+            editor.setFocus()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not open file:\n{e}")
     

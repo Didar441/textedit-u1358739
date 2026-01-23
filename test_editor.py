@@ -2435,6 +2435,44 @@ class TestMultiTabFunctionality:
         assert editor1.textCursor().blockNumber() == 2
         assert editor2.textCursor().blockNumber() == 0
 
+    def test_editor_has_focus_on_startup(self, qtbot):
+        """Test that the editor has focus when the application starts."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        qtbot.wait(100)  # Allow focus events to process
+        
+        assert window.editor.hasFocus(), "Editor should have focus on startup"
+
+    def test_editor_has_focus_after_new_file(self, qtbot):
+        """Test that the editor has focus after creating a new file."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Create a new file
+        window.new_file()
+        qtbot.wait(100)
+        
+        assert window.editor.hasFocus(), "Editor should have focus after new file"
+
+    def test_editor_has_focus_after_opening_file(self, qtbot, tmp_path):
+        """Test that the editor has focus after opening an existing file."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Create and open a file
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("content")
+        window.load_file(str(test_file))
+        qtbot.wait(100)
+        
+        assert window.editor.hasFocus(), "Editor should have focus after opening file"
+
     def test_save_untitled_tab_when_not_current_shows_save_dialog(self, qtbot, tmp_path, monkeypatch):
         """Test that saving an untitled modified tab shows save dialog even when it's not the current tab.
         

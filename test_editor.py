@@ -3169,6 +3169,113 @@ class TestMultiFileSearchBugFix:
             window.close()
 
 
+class TestOpenFileInMultipleViews:
+    """Tests for opening files in multiple views."""
+    
+    def test_opening_already_open_file_opens_in_active_view(self, qtbot, tmp_path):
+        """Test that opening a file already open in another view opens it in the active view.
+        
+        Bug: When file X is open in view 1 and you try to open file X from view 2,
+        it should open file X in view 2 (same file in both views), but instead it
+        just switches to view 1 where the file is already open.
+        """
+        # Create editor window
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Get the first pane
+        pane1 = window.active_pane
+        
+        # Create a test file
+        test_file = tmp_path / "shared_file.txt"
+        test_file.write_text("shared content")
+        
+        # Open file in pane 1
+        window.load_file(str(test_file))
+        assert window.active_pane == pane1
+        assert window.current_file == str(test_file)
+        
+        # Create a second view
+        window.add_split_view()
+        assert len(window.split_panes) == 2
+        pane2 = window.split_panes[1]
+        
+        # Pane 2 should be active
+        assert window.active_pane == pane2
+        
+        # Now try to open the same file (which is already open in pane 1)
+        # It should open in pane 2, not just switch to pane 1
+        window.load_file(str(test_file))
+        
+        # Verify pane 2 is still active (not switched to pane 1)
+        assert window.active_pane == pane2, f"After opening file in pane 2, pane 2 should be active but pane {window.split_panes.index(window.active_pane) + 1} is active"
+        
+        # Verify the file is now open in both panes
+        # Check that pane2 has the file in its current tab
+        current_index_pane2 = pane2.tab_widget.currentIndex()
+        file_found_in_pane2 = False
+        for file_path, (pane, idx) in window.open_files.items():
+            if pane == pane2 and idx == current_index_pane2 and file_path == str(test_file):
+                file_found_in_pane2 = True
+                break
+        assert file_found_in_pane2, f"File should be in pane 2's current tab"
+
+
+class TestViewActivation:
+    """Tests for view/pane activation."""
+    
+    def test_clicking_on_view_updates_current_file(self, qtbot, tmp_path):
+        """Test that clicking on a view updates current_file to match that view.
+        
+        Bug: When multiple views are open with different files, clicking on a view
+        doesn't update current_file to reflect the file in that view. This causes
+        the wrong file to be saved/operated on.
+        """
+        # Create editor window
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Get the first pane
+        pane1 = window.active_pane
+        assert pane1 is not None
+        
+        # Open a file in pane 1
+        test_file1 = tmp_path / "file1.txt"
+        test_file1.write_text("file 1 content")
+        window.load_file(str(test_file1))
+        assert window.current_file == str(test_file1)
+        
+        # Create a second view
+        window.add_split_view()
+        assert len(window.split_panes) == 2
+        pane2 = window.split_panes[1]
+        
+        # Pane 2 is now active with an empty/untitled tab
+        assert window.active_pane == pane2
+        # current_file should be None because pane2 has no file
+        assert window.current_file is None
+        
+        # Open a different file in pane 2
+        test_file2 = tmp_path / "file2.txt"
+        test_file2.write_text("file 2 content")
+        window.load_file(str(test_file2))
+        assert window.current_file == str(test_file2)
+        
+        # Now click on pane 1 to make it active
+        qtbot.mouseClick(pane1, Qt.LeftButton)
+        
+        # Verify pane 1 is now active
+        assert window.active_pane == pane1, "Pane 1 should be active after clicking on it"
+        
+        # THE BUG: current_file should be updated to file1, but it stays as file2
+        # This is the bug - when you switch panes, current_file should reflect the file in the active pane
+        assert window.current_file == str(test_file1), f"After clicking pane 1, current_file should be {test_file1} but is {window.current_file}"
+
+
 class TestMultiViewSaveFile:
     """Tests for save file behavior with multiple views."""
     

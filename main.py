@@ -1257,6 +1257,10 @@ class TextEditor(QMainWindow):
         self.welcome_screen = pane.welcome_screen
         if self.tab_widget.count() > 0:
             self.editor = self.tab_widget.currentWidget()
+            # Update current_file to reflect the file in the new active pane's current tab
+            current_index = self.tab_widget.currentIndex()
+            if current_index >= 0:
+                self.on_tab_changed(current_index)
     
     def create_new_tab(self, file_path=None):
         """Create a new editor tab."""
@@ -1617,19 +1621,25 @@ class TextEditor(QMainWindow):
     
     def load_file(self, file_path):
         try:
-            # Check if file is already open in a different tab (in any pane)
+            # Check if file is already open in the active pane's current tab
             if file_path in self.open_files:
                 pane_info = self.open_files[file_path]
                 if isinstance(pane_info, tuple):
                     pane, tab_index = pane_info
-                    # Only switch if in a different pane or different tab
-                    if pane != self.active_pane or tab_index != self.tab_widget.currentIndex():
-                        self.set_active_pane(pane)
+                    # Only switch tab if file is already open in the active pane
+                    if pane == self.active_pane and tab_index != self.tab_widget.currentIndex():
                         self.tab_widget.setCurrentIndex(tab_index)
                         return
+                    # If file is in a different pane, we'll open it in the active pane (don't return, continue below)
                 elif pane_info != self.tab_widget.currentIndex():
-                    self.tab_widget.setCurrentIndex(pane_info)
-                    return
+                    # Check if this is in the active pane
+                    # If it's in the current tab widget, switch to it
+                    for file_p, info in self.open_files.items():
+                        if isinstance(info, tuple):
+                            p, idx = info
+                            if p == self.active_pane and idx == pane_info and file_p == file_path:
+                                self.tab_widget.setCurrentIndex(pane_info)
+                                return
             
             # Load file content
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -1644,9 +1654,14 @@ class TextEditor(QMainWindow):
                 editor = current_editor
                 self.open_files[file_path] = (self.active_pane, current_index)
                 self.file_modified_state[file_path] = False
-            elif file_path in self.open_files:
-                # File is already mapped to current tab, reuse it
-                editor = current_editor
+            elif file_path in self.open_files and isinstance(self.open_files[file_path], tuple):
+                pane, tab_index = self.open_files[file_path]
+                if pane == self.active_pane:
+                    # File is already in active pane, reuse it
+                    editor = self.tab_widget.widget(tab_index)
+                else:
+                    # File is in a different pane, create new tab in active pane
+                    editor, _ = self.create_new_tab(file_path)
             else:
                 # Create new tab for this file
                 editor, _ = self.create_new_tab(file_path)

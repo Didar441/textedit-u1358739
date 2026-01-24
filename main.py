@@ -1975,23 +1975,26 @@ class TextEditor(QMainWindow):
     
     def closeEvent(self, event):
         """Check all tabs for unsaved changes before closing."""
-        # Check each tab for unsaved changes
-        for i in range(self.tab_widget.count()):
-            editor = self.tab_widget.widget(i)
-            if editor and editor.document().isModified():
-                self.tab_widget.setCurrentIndex(i)
-                ret = QMessageBox.warning(
-                    self, "TextEdit",
-                    "The document has been modified.\nDo you want to save your changes?",
-                    QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
-                )
-                if ret == QMessageBox.Save:
-                    if not self.save_current_file():
+        # Check all panes and their tabs for unsaved changes
+        for pane in self.split_panes:
+            for i in range(pane.tab_widget.count()):
+                editor = pane.tab_widget.widget(i)
+                if editor and editor.document().isModified():
+                    # Switch to this pane to show the user which file has unsaved changes
+                    self.set_active_pane(pane)
+                    pane.tab_widget.setCurrentIndex(i)
+                    ret = QMessageBox.warning(
+                        self, "TextEdit",
+                        "The document has been modified.\nDo you want to save your changes?",
+                        QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
+                    )
+                    if ret == QMessageBox.Save:
+                        if not self.save_current_file():
+                            event.ignore()
+                            return
+                    elif ret == QMessageBox.Cancel:
                         event.ignore()
                         return
-                elif ret == QMessageBox.Cancel:
-                    event.ignore()
-                    return
         event.accept()
 
 

@@ -3632,3 +3632,54 @@ class TestTabClickBehavior:
         # After clicking, pane1 should be active and editor1 should have focus
         assert window.active_pane == pane1, "Pane1 should become active when clicking its tab"
         assert editor1.hasFocus(), "Cursor should move to editor1 in pane1 after clicking its tab"
+
+
+class TestMultipleSplitPanesUnsavedChanges:
+    """Tests for unsaved changes handling across multiple split panes."""
+
+    def test_multiple_views_unsaved_changes_on_exit(self, qtbot, monkeypatch):
+        """Test that closing the app with unsaved changes in non-active pane is detected."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Create first pane with unsaved changes
+        editor1 = window.tab_widget.widget(0)
+        editor1.insertPlainText("Changes in pane 1")
+        pane1 = window.active_pane
+        assert editor1.document().isModified()
+        
+        # Split the view to create second pane
+        window.add_split_view()
+        pane2 = window.active_pane
+        editor2 = window.tab_widget.widget(0)
+        # Don't add unsaved changes to pane2, it starts clean
+        assert not editor2.document().isModified()
+        
+        # Now switch back to pane1 (making it active), then switch to pane2
+        # This leaves pane1 non-active but with unsaved changes
+        window.set_active_pane(pane2)
+        assert window.active_pane == pane2
+        assert window.tab_widget == pane2.tab_widget
+        
+        # Mock warning to return Cancel for closeEvent
+        warning_call_count = [0]
+        
+        def mock_warning_close(*args, **kwargs):
+            warning_call_count[0] += 1
+            # Return Cancel to prevent close
+            return QMessageBox.Cancel
+        
+        monkeypatch.setattr("main.QMessageBox.warning", mock_warning_close)
+        
+        # Now try to close the app - it should prompt for unsaved changes in pane1 even though pane2 is active
+        from PySide6.QtGui import QCloseEvent
+        close_event = QCloseEvent()
+        
+        window.closeEvent(close_event)
+        
+        # Should have asked about unsaved changes in pane1 (the non-active pane)
+        assert warning_call_count[0] >= 1, f"Should prompt about unsaved changes in non-active pane, but got {warning_call_count[0]} warnings"
+        # The event should be ignored because we returned Cancel
+        assert not close_event.isAccepted(), "Should not close when user cancels"

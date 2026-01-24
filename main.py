@@ -227,15 +227,17 @@ class CustomTabWidget(QTabWidget):
         """)
     
     def dragEnterEvent(self, event):
-        """Accept drag events with file URLs."""
-        if event.mimeData().hasUrls():
+        """Accept drag events with file URLs and tab drags."""
+        mime = event.mimeData()
+        if mime.hasUrls() or mime.text().startswith("tab:"):
             event.acceptProposedAction()
         else:
             super().dragEnterEvent(event)
     
     def dragMoveEvent(self, event):
-        """Handle drag move events."""
-        if event.mimeData().hasUrls():
+        """Handle drag move events for files and tabs."""
+        mime = event.mimeData()
+        if mime.hasUrls() or mime.text().startswith("tab:"):
             event.acceptProposedAction()
         else:
             super().dragMoveEvent(event)
@@ -1590,22 +1592,39 @@ class TextEditor(QMainWindow):
         except (IndexError, ValueError):
             return
         
-        # Find the source pane by looking for the tab
+        # Find the source pane by first checking open_files to identify which pane
+        # has the file at this tab index. This is more reliable than just checking
+        # if a pane has enough tabs.
         source_pane = None
         source_editor = None
+        source_file_path = None
         
-        for pane in self.split_panes:
-            if pane.tab_widget.count() > tab_index:
+        # First try to find source pane by looking up in open_files
+        for file_path, (pane, idx) in self.open_files.items():
+            if idx == tab_index and pane != dest_pane:
+                # Found a file at this index in a different pane
                 widget = pane.tab_widget.widget(tab_index)
                 if widget and isinstance(widget, CodeEditor):
                     source_pane = pane
                     source_editor = widget
+                    source_file_path = file_path
                     break
+        
+        # Fallback: if not found in open_files, search by checking tab widgets
+        # This handles cases where the file might not yet be tracked in open_files
+        if not source_pane:
+            for pane in self.split_panes:
+                if pane != dest_pane and pane.tab_widget.count() > tab_index:
+                    widget = pane.tab_widget.widget(tab_index)
+                    if widget and isinstance(widget, CodeEditor):
+                        source_pane = pane
+                        source_editor = widget
+                        break
         
         if not source_pane or not source_editor or source_pane == dest_pane:
             return
         
-        # Get the file path from open_files
+        # Get the file path from open_files if not already found
         file_path = None
         for fp, (p, idx) in self.open_files.items():
             if p == source_pane and idx == tab_index:

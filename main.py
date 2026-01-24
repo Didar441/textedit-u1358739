@@ -1630,15 +1630,12 @@ class TextEditor(QMainWindow):
         if not source_editor or not isinstance(source_editor, CodeEditor):
             return
         
-        # Get the file path from open_files if not already found
+        # Get the file path from open_files if exists (will be None for Untitled tabs)
         file_path = None
         for fp, (p, idx) in self.open_files.items():
             if p == source_pane and idx == tab_index:
                 file_path = fp
                 break
-        
-        if not file_path:
-            return
         
         # Move the tab to the destination pane
         # Get tab info
@@ -1677,7 +1674,8 @@ class TextEditor(QMainWindow):
         
         # Update tracking
         current_index = dest_pane.tab_widget.currentIndex()
-        self.open_files[file_path] = (dest_pane, current_index)
+        if file_path:
+            self.open_files[file_path] = (dest_pane, current_index)
         
         # If file was NOT modified, store content so it stays unmodified
         # If it WAS modified, mark it and update tab title

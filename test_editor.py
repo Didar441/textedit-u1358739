@@ -4487,3 +4487,49 @@ class TestDropTabOntoTabBar:
         assert any("file1.txt" in t for t in pane2_tabs), \
             f"file1.txt should be in pane2, but pane2 has: {pane2_tabs}"
         assert pane2.tab_widget.count() == 3, f"pane2 should have 3 tabs, has {pane2.tab_widget.count()}"
+
+
+class TestMoveUntitledTab:
+    """Test moving untitled tabs between views."""
+
+    def test_move_untitled_tab_to_another_view(self, qtbot, tmp_path):
+        """Bug test: Untitled tabs should be movable to another view."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Load a file in pane1
+        file1 = tmp_path / "file1.txt"
+        file1.write_text("content 1")
+        
+        pane1 = window.active_pane
+        window.load_file(str(file1))
+        
+        # Create pane2 - it will have an Untitled tab by default
+        window.add_split_view()
+        pane2 = window.active_pane
+        
+        # Verify initial state
+        assert pane1.tab_widget.count() == 1
+        assert pane2.tab_widget.count() == 1
+        assert "Untitled" in pane2.tab_widget.tabText(0)
+        
+        print(f"pane1 tabs: {[pane1.tab_widget.tabText(i) for i in range(pane1.tab_widget.count())]}")
+        print(f"pane2 tabs: {[pane2.tab_widget.tabText(i) for i in range(pane2.tab_widget.count())]}")
+        
+        # Try to move the Untitled tab from pane2 to pane1
+        window.on_tab_dropped_to_pane(f"tab:0:{id(pane2)}", pane1)
+        qtbot.wait(50)
+        
+        print(f"After move:")
+        print(f"pane1 tabs: {[pane1.tab_widget.tabText(i) for i in range(pane1.tab_widget.count())]}")
+        print(f"split_panes count: {len(window.split_panes)}")
+        
+        # The Untitled tab should now be in pane1, and pane2 should be closed
+        assert len(window.split_panes) == 1, "pane2 should be closed after moving its last tab"
+        assert pane1.tab_widget.count() == 2, f"pane1 should have 2 tabs, has {pane1.tab_widget.count()}"
+        
+        pane1_tabs = [pane1.tab_widget.tabText(i) for i in range(pane1.tab_widget.count())]
+        assert any("Untitled" in t for t in pane1_tabs), \
+            f"Untitled should be in pane1, but pane1 has: {pane1_tabs}"

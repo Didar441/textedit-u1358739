@@ -8,7 +8,7 @@
 // Make so if a cursor is on that view, then that view is the active view and when a new file is opened it is opened in that view.
 // Make so when a file is already opened and I try to open it in a different view (open it when a different view is active), then it works and now has the file opened twice.
 
-Could
-Can't drag and drop a file or folder into another folder in the sidebar.
-Can't drag and drop tabs from one view over to another view.
+// Could
+// Can't drag and drop a file or folder into another folder in the sidebar.
+// Can't drag and drop tabs from one view over to another view.
 // Make so find and replace highlights all instances of the "find" and emphasizes the one that it is currently on.

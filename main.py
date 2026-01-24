@@ -11,7 +11,8 @@ from PySide6.QtGui import (
     QAction, QKeySequence, QFont, QColor, QPainter, QTextFormat,
     QTextCursor, QFontMetrics, QPalette, QShortcut, QTextCharFormat
 )
-from PySide6.QtCore import Qt, QRect, QSize, QDir, Signal, QTimer, QPoint
+from PySide6.QtCore import Qt, QRect, QSize, QDir, Signal, QTimer, QPoint, QMimeData, QUrl
+from PySide6.QtGui import QDrag
 
 
 class WelcomeScreen(QWidget):
@@ -821,6 +822,226 @@ class MultiFileSearchDialog(QDialog):
         QMessageBox.information(self, "Replace Complete", f"Replaced {replaced_count} occurrences in {len(files_to_replace)} files.")
 
 
+
+
+class DragDropFileTree(QTreeView):
+    """QTreeView with drag and drop support for moving files/folders."""
+    
+    files_moved = Signal(list)  # Signal with list of (old_path, new_path) tuples
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDefaultDropAction(Qt.MoveAction)
+    
+    def dragEnterEvent(self, event):
+        """Accept drag events."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+    
+    def dragMoveEvent(self, event):
+        """Handle drag move events."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+    
+    def dropEvent(self, event):
+        """Handle drop events to move files/folders."""
+        if not event.mimeData().hasUrls():
+            super().dropEvent(event)
+            return
+        
+        # Get the destination index
+        drop_pos = event.position().toPoint()
+        dest_index = self.indexAt(drop_pos)
+        
+        if not dest_index.isValid():
+            return
+        
+        # Get the file model
+        file_model = self.model()
+        if not file_model:
+            return
+        
+        dest_path = file_model.filePath(dest_index)
+        
+        # Check if destination is a folder
+        if not file_model.isDir(dest_index):
+            return
+        
+        # Get source URLs
+        urls = event.mimeData().urls()
+        
+        # Track file moves for later notification
+        moved_files = []
+        
+        # Move each file/folder
+        for url in urls:
+            source_path = url.toLocalFile()
+            
+            if not source_path:
+                continue
+            
+            # Prevent moving to itself
+            if os.path.normpath(source_path) == os.path.normpath(dest_path):
+                continue
+            
+            # Prevent moving a folder into itself
+            if os.path.normpath(dest_path).startswith(os.path.normpath(source_path) + os.sep):
+                continue
+            
+            try:
+                import shutil
+                source_name = os.path.basename(source_path)
+                dest_file_path = os.path.join(dest_path, source_name)
+                
+                # Check if destination already exists
+                if os.path.exists(dest_file_path):
+                    # If it's a directory and source is also a directory, merge
+                    if os.path.isdir(dest_file_path) and os.path.isdir(source_path):
+                        # Move contents into existing directory
+                        for item in os.listdir(source_path):
+                            src = os.path.join(source_path, item)
+                            dst = os.path.join(dest_file_path, item)
+                            if os.path.exists(dst):
+                                if os.path.isdir(dst):
+                                    shutil.rmtree(dst)
+                                else:
+                                    os.remove(dst)
+                            shutil.move(src, dst)
+                        os.rmdir(source_path)
+                        moved_files.append((source_path, dest_file_path))
+                    else:
+                        # Skip if file with same name exists
+                        continue
+                else:
+                    # Move the file or folder
+                    shutil.move(source_path, dest_file_path)
+                    moved_files.append((source_path, dest_file_path))
+            except Exception as e:
+                pass
+        
+        # Notify listeners of the file moves
+        if moved_files:
+            self.files_moved.emit(moved_files)
+        
+        event.acceptProposedAction()
+
+
+
+class DragDropFileTree(QTreeView):
+    """QTreeView with drag and drop support for moving files/folders."""
+    
+    files_moved = Signal(list)  # Signal with list of (old_path, new_path) tuples
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDefaultDropAction(Qt.MoveAction)
+    
+    def dragEnterEvent(self, event):
+        """Accept drag events."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+    
+    def dragMoveEvent(self, event):
+        """Handle drag move events."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+    
+    def dropEvent(self, event):
+        """Handle drop events to move files/folders."""
+        if not event.mimeData().hasUrls():
+            super().dropEvent(event)
+            return
+        
+        # Get the destination index
+        drop_pos = event.position().toPoint()
+        dest_index = self.indexAt(drop_pos)
+        
+        if not dest_index.isValid():
+            return
+        
+        # Get the file model
+        file_model = self.model()
+        if not file_model:
+            return
+        
+        dest_path = file_model.filePath(dest_index)
+        
+        # Check if destination is a folder
+        if not file_model.isDir(dest_index):
+            return
+        
+        # Get source URLs
+        urls = event.mimeData().urls()
+        
+        # Track file moves for later notification
+        moved_files = []
+        
+        # Move each file/folder
+        for url in urls:
+            source_path = url.toLocalFile()
+            
+            if not source_path:
+                continue
+            
+            # Prevent moving to itself
+            if os.path.normpath(source_path) == os.path.normpath(dest_path):
+                continue
+            
+            # Prevent moving a folder into itself
+            if os.path.normpath(dest_path).startswith(os.path.normpath(source_path) + os.sep):
+                continue
+            
+            try:
+                import shutil
+                source_name = os.path.basename(source_path)
+                dest_file_path = os.path.join(dest_path, source_name)
+                
+                # Check if destination already exists
+                if os.path.exists(dest_file_path):
+                    # If it's a directory and source is also a directory, merge
+                    if os.path.isdir(dest_file_path) and os.path.isdir(source_path):
+                        # Move contents into existing directory
+                        for item in os.listdir(source_path):
+                            src = os.path.join(source_path, item)
+                            dst = os.path.join(dest_file_path, item)
+                            if os.path.exists(dst):
+                                if os.path.isdir(dst):
+                                    shutil.rmtree(dst)
+                                else:
+                                    os.remove(dst)
+                            shutil.move(src, dst)
+                        os.rmdir(source_path)
+                        moved_files.append((source_path, dest_file_path))
+                    else:
+                        # Skip if file with same name exists
+                        continue
+                else:
+                    # Move the file or folder
+                    shutil.move(source_path, dest_file_path)
+                    moved_files.append((source_path, dest_file_path))
+            except Exception as e:
+                pass
+        
+        # Notify listeners of the file moves
+        if moved_files:
+            self.files_moved.emit(moved_files)
+        
+        event.acceptProposedAction()
+
 class TextEditor(QMainWindow):
     """Main text editor window."""
     
@@ -884,7 +1105,7 @@ class TextEditor(QMainWindow):
         self.file_model = QFileSystemModel()
         self.file_model.setRootPath(QDir.currentPath())
         
-        self.file_tree = QTreeView()
+        self.file_tree = DragDropFileTree()
         self.file_tree.setModel(self.file_model)
         self.file_tree.setRootIndex(self.file_model.index(QDir.currentPath()))
         self.file_tree.setColumnHidden(1, True)
@@ -896,6 +1117,8 @@ class TextEditor(QMainWindow):
         self.file_tree.doubleClicked.connect(self.open_file_from_tree)
         self.file_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.file_tree.customContextMenuRequested.connect(self.show_file_tree_context_menu)
+        self.file_tree.files_moved.connect(self.on_files_moved)
+        self.file_tree.files_moved.connect(self.on_files_moved)
         sidebar_layout.addWidget(self.file_tree)
         
         self.update_folder_label(QDir.currentPath())
@@ -1732,6 +1955,118 @@ class TextEditor(QMainWindow):
                 self.file_model.setRootPath(root_path)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Could not delete:\n{e}")
+    
+
+    def on_files_moved(self, moved_files):
+        """Handle files that were moved via drag and drop in the file tree."""
+        for old_path, new_path in moved_files:
+            self.update_moved_file_paths(old_path, new_path)
+    
+    def update_moved_file_paths(self, old_path, new_path):
+        """Update tracked file paths when a file is moved."""
+        old_path_norm = os.path.normpath(old_path)
+        new_path_norm = os.path.normpath(new_path)
+        
+        # Check if this file or files in this directory are open
+        files_to_update = []
+        for file_path in list(self.open_files.keys()):
+            file_path_norm = os.path.normpath(file_path)
+            
+            # Check if this is the exact file or a file inside the moved directory
+            if file_path_norm == old_path_norm:
+                # Exact match - single file was moved
+                files_to_update.append((file_path, new_path))
+            elif file_path_norm.startswith(old_path_norm + os.sep):
+                # File is inside the moved directory
+                relative_path = file_path_norm[len(old_path_norm) + 1:]
+                updated_path = os.path.join(new_path, relative_path)
+                files_to_update.append((file_path, updated_path))
+        
+        # Update all tracked paths
+        for old_file_path, new_file_path in files_to_update:
+            # Update the open_files dictionary
+            pane_info = self.open_files.pop(old_file_path)
+            self.open_files[new_file_path] = pane_info
+            
+            # Update file_modified_state if present
+            if old_file_path in self.file_modified_state:
+                state = self.file_modified_state.pop(old_file_path)
+                self.file_modified_state[new_file_path] = state
+            
+            # Update current_file if it was the current file
+            if self.current_file == old_file_path:
+                self.current_file = new_file_path
+                # Update window title with new path
+                file_name = os.path.basename(new_file_path)
+                self.setWindowTitle(f"TextEdit - {file_name}")
+            
+            # Update the tab label if the file is open
+            if isinstance(pane_info, tuple):
+                pane, tab_index = pane_info
+                if pane and tab_index < pane.tab_widget.count():
+                    file_name = os.path.basename(new_file_path)
+                    pane.tab_widget.setTabText(tab_index, file_name)
+            else:
+                # Legacy format (just tab index)
+                if pane_info < self.tab_widget.count():
+                    file_name = os.path.basename(new_file_path)
+                    self.tab_widget.setTabText(pane_info, file_name)
+    
+
+    def on_files_moved(self, moved_files):
+        """Handle files that were moved via drag and drop in the file tree."""
+        for old_path, new_path in moved_files:
+            self.update_moved_file_paths(old_path, new_path)
+    
+    def update_moved_file_paths(self, old_path, new_path):
+        """Update tracked file paths when a file is moved."""
+        old_path_norm = os.path.normpath(old_path)
+        new_path_norm = os.path.normpath(new_path)
+        
+        # Check if this file or files in this directory are open
+        files_to_update = []
+        for file_path in list(self.open_files.keys()):
+            file_path_norm = os.path.normpath(file_path)
+            
+            # Check if this is the exact file or a file inside the moved directory
+            if file_path_norm == old_path_norm:
+                # Exact match - single file was moved
+                files_to_update.append((file_path, new_path))
+            elif file_path_norm.startswith(old_path_norm + os.sep):
+                # File is inside the moved directory
+                relative_path = file_path_norm[len(old_path_norm) + 1:]
+                updated_path = os.path.join(new_path, relative_path)
+                files_to_update.append((file_path, updated_path))
+        
+        # Update all tracked paths
+        for old_file_path, new_file_path in files_to_update:
+            # Update the open_files dictionary
+            pane_info = self.open_files.pop(old_file_path)
+            self.open_files[new_file_path] = pane_info
+            
+            # Update file_modified_state if present
+            if old_file_path in self.file_modified_state:
+                state = self.file_modified_state.pop(old_file_path)
+                self.file_modified_state[new_file_path] = state
+            
+            # Update current_file if it was the current file
+            if self.current_file == old_file_path:
+                self.current_file = new_file_path
+                # Update window title with new path
+                file_name = os.path.basename(new_file_path)
+                self.setWindowTitle(f"TextEdit - {file_name}")
+            
+            # Update the tab label if the file is open
+            if isinstance(pane_info, tuple):
+                pane, tab_index = pane_info
+                if pane and tab_index < pane.tab_widget.count():
+                    file_name = os.path.basename(new_file_path)
+                    pane.tab_widget.setTabText(tab_index, file_name)
+            else:
+                # Legacy format (just tab index)
+                if pane_info < self.tab_widget.count():
+                    file_name = os.path.basename(new_file_path)
+                    self.tab_widget.setTabText(pane_info, file_name)
     
     def load_file(self, file_path):
         try:

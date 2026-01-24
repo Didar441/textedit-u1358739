@@ -1648,13 +1648,29 @@ class TextEditor(QMainWindow):
         # Add to destination pane
         self.set_active_pane(dest_pane)
         new_editor, _ = self.create_new_tab(file_path)
+        
+        # Block signals while setting content to prevent spurious modification marking
+        new_editor.blockSignals(True)
         new_editor.setPlainText(tab_content)
-        if is_modified:
-            new_editor.document().setModified(True)
+        new_editor.blockSignals(False)
         
         # Update tracking
         current_index = dest_pane.tab_widget.currentIndex()
         self.open_files[file_path] = (dest_pane, current_index)
+        
+        # If file was NOT modified, store content so it stays unmodified
+        # If it WAS modified, mark it and update tab title
+        if is_modified:
+            new_editor.document().setModified(True)
+            # Update tab with asterisk
+            base_name = os.path.basename(file_path) if file_path else "Untitled"
+            dest_pane.tab_widget.setTabText(current_index, base_name + " *")
+            dest_pane.update_file_label(base_name + " *")
+        else:
+            new_editor.document().setModified(False)
+            # Store the saved content so on_text_changed knows this is unmodified
+            key = (dest_pane, current_index)
+            self.saved_content[key] = tab_content
     
     def close_split_pane(self, pane):
         """Close a split pane."""

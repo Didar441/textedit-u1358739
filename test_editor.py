@@ -4533,3 +4533,105 @@ class TestMoveUntitledTab:
         pane1_tabs = [pane1.tab_widget.tabText(i) for i in range(pane1.tab_widget.count())]
         assert any("Untitled" in t for t in pane1_tabs), \
             f"Untitled should be in pane1, but pane1 has: {pane1_tabs}"
+
+
+class TestUntitledDocumentModifiedState:
+    """Tests for untitled document modified state tracking."""
+
+    def test_untitled_document_not_modified_when_empty(self, qtbot):
+        """A new untitled document should not be marked as modified when empty."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Get the editor for the untitled tab
+        editor = window.editor
+        
+        # Empty untitled document should not be modified
+        assert not editor.document().isModified(), "Empty untitled document should not be modified"
+        
+        # Tab title should not have asterisk
+        tab_title = window.tab_widget.tabText(0)
+        assert not tab_title.endswith("*"), f"Tab title should not have asterisk: {tab_title}"
+
+    def test_untitled_document_modified_after_typing(self, qtbot):
+        """An untitled document should be marked as modified after typing."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        editor = window.editor
+        
+        # Type some text (use insertPlainText which simulates actual typing)
+        editor.insertPlainText("Hello")
+        qtbot.wait(50)
+        
+        # Should be modified
+        assert editor.document().isModified(), "Document should be modified after typing"
+        
+        # Tab title should have asterisk
+        tab_title = window.tab_widget.tabText(0)
+        assert tab_title.endswith("*"), f"Tab title should have asterisk: {tab_title}"
+
+    def test_untitled_document_not_modified_after_undo_to_empty(self, qtbot):
+        """An untitled document should not be modified after undoing back to empty."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        editor = window.editor
+        editor.setFocus()
+        qtbot.wait(50)
+        
+        # Type using keyboard simulation (more realistic than insertPlainText)
+        qtbot.keyClicks(editor, "Hello")
+        qtbot.wait(50)
+        
+        # Verify it's modified and tab has asterisk
+        assert editor.document().isModified(), "Document should be modified after typing"
+        tab_title = window.tab_widget.tabText(0)
+        assert tab_title.endswith("*"), f"Tab title should have asterisk after typing: {tab_title}"
+        
+        # Undo all changes (each keyClick is a separate undo action)
+        while editor.document().isUndoAvailable():
+            qtbot.keyClick(editor, Qt.Key_Z, Qt.ControlModifier)
+            qtbot.wait(10)
+        qtbot.wait(50)
+        
+        # Verify content is empty
+        assert editor.toPlainText() == "", f"Content should be empty after undo, got: {repr(editor.toPlainText())}"
+        
+        # Should NOT be modified (back to original empty state)
+        assert not editor.document().isModified(), "Document should not be modified after undo to empty"
+        
+        # Tab title should NOT have asterisk
+        tab_title = window.tab_widget.tabText(0)
+        assert not tab_title.endswith("*"), f"Tab title should not have asterisk after undo: {tab_title}"
+
+    def test_untitled_document_close_without_warning_when_empty(self, qtbot):
+        """Closing an empty untitled document should not show unsaved changes warning."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        editor = window.editor
+        
+        # Type and then undo to get back to empty
+        editor.insertPlainText("Hello")
+        qtbot.wait(50)
+        editor.undo()
+        qtbot.wait(50)
+        
+        # Should not be modified
+        assert not editor.document().isModified(), "Document should not be modified after undo"
+        
+        # Close tab should not trigger warning (mocking to verify no dialog appears)
+        with patch.object(QMessageBox, 'warning', return_value=QMessageBox.Discard) as mock_warning:
+            window.close_tab(0)
+            qtbot.wait(50)
+            # Warning should NOT have been called since document is not modified
+            mock_warning.assert_not_called()

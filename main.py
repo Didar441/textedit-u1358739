@@ -1841,6 +1841,11 @@ class TextEditor(QMainWindow):
             self.open_files[file_path] = (self.active_pane, index)
             self.file_modified_state[file_path] = False
         
+        # Store original content for untitled documents so we can track if it's modified
+        # For untitled docs, the original content is empty string
+        key = (self.active_pane, index)
+        self.saved_content[key] = ""
+        
         self.tab_widget.setCurrentIndex(index)
         self.current_file = file_path
         self.editor = editor

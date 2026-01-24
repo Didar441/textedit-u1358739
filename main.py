@@ -120,10 +120,19 @@ class CustomTabBar(QTabBar):
         if index < 0 or index >= self.count():
             return
         
-        # Create mime data with tab information
+        # Find the parent SplitEditorPane to identify the source pane
+        source_pane_id = 0
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'tab_widget'):  # SplitEditorPane has tab_widget
+                source_pane_id = id(parent)
+                break
+            parent = parent.parent()
+        
+        # Create mime data with tab information including source pane id
         mime_data = QMimeData()
-        # Store the tab index and parent widget info
-        mime_data.setText(f"tab:{index}")
+        # Store the tab index and source pane id
+        mime_data.setText(f"tab:{index}:{source_pane_id}")
         
         # Create drag object
         drag = QDrag(self)
@@ -1586,42 +1595,32 @@ class TextEditor(QMainWindow):
     
     def on_tab_dropped_to_pane(self, tab_info, dest_pane):
         """Handle a tab dropped onto another pane."""
-        # Parse the tab info
+        # Parse the tab info (format: "tab:{index}:{source_pane_id}")
         try:
-            tab_index = int(tab_info.split(":")[1])
+            parts = tab_info.split(":")
+            tab_index = int(parts[1])
+            source_pane_id = int(parts[2]) if len(parts) > 2 else 0
         except (IndexError, ValueError):
             return
         
-        # Find the source pane by first checking open_files to identify which pane
-        # has the file at this tab index. This is more reliable than just checking
-        # if a pane has enough tabs.
+        # Find the source pane using the id from the drag data
         source_pane = None
-        source_editor = None
-        source_file_path = None
+        for pane in self.split_panes:
+            if id(pane) == source_pane_id:
+                source_pane = pane
+                break
         
-        # First try to find source pane by looking up in open_files
-        for file_path, (pane, idx) in self.open_files.items():
-            if idx == tab_index and pane != dest_pane:
-                # Found a file at this index in a different pane
-                widget = pane.tab_widget.widget(tab_index)
-                if widget and isinstance(widget, CodeEditor):
-                    source_pane = pane
-                    source_editor = widget
-                    source_file_path = file_path
-                    break
+        # If source pane is the same as dest pane, this is a reorder within the same pane
+        # The tab bar handles reordering internally, so we just ignore this
+        if not source_pane or source_pane == dest_pane:
+            return
         
-        # Fallback: if not found in open_files, search by checking tab widgets
-        # This handles cases where the file might not yet be tracked in open_files
-        if not source_pane:
-            for pane in self.split_panes:
-                if pane != dest_pane and pane.tab_widget.count() > tab_index:
-                    widget = pane.tab_widget.widget(tab_index)
-                    if widget and isinstance(widget, CodeEditor):
-                        source_pane = pane
-                        source_editor = widget
-                        break
+        # Verify the tab index is valid in the source pane
+        if tab_index < 0 or tab_index >= source_pane.tab_widget.count():
+            return
         
-        if not source_pane or not source_editor or source_pane == dest_pane:
+        source_editor = source_pane.tab_widget.widget(tab_index)
+        if not source_editor or not isinstance(source_editor, CodeEditor):
             return
         
         # Get the file path from open_files if not already found
@@ -1644,6 +1643,21 @@ class TextEditor(QMainWindow):
         source_pane.tab_widget.removeTab(tab_index)
         if file_path in self.open_files:
             del self.open_files[file_path]
+        
+        # Update indices for remaining tabs in source pane (they shifted down by 1)
+        for fp, (p, idx) in list(self.open_files.items()):
+            if p == source_pane and idx > tab_index:
+                self.open_files[fp] = (p, idx - 1)
+        
+        # Check if source pane is now empty and should be closed
+        source_pane_empty = source_pane.tab_widget.count() == 0
+        if source_pane_empty and len(self.split_panes) > 1:
+            # Close the now-empty source pane
+            self.split_panes.remove(source_pane)
+            source_pane.setParent(None)
+            source_pane.deleteLater()
+            self.update_split_button_state()
+            self.update_pane_close_buttons()
         
         # Add to destination pane
         self.set_active_pane(dest_pane)

@@ -3946,7 +3946,7 @@ class TestDragTabBetweenViews:
         pane2 = window.active_pane
         
         # Call the handler directly to move tab from pane1 to pane2
-        window.on_tab_dropped_to_pane("tab:0", pane2)
+        window.on_tab_dropped_to_pane(f"tab:0:{id(pane1)}", pane2)
         qtbot.wait(100)
         
         # Tab should now be in pane2
@@ -3987,7 +3987,7 @@ class TestMoveTabModifiedState:
         qtbot.wait(50)
         
         # Move the tab from pane1 to pane2
-        window.on_tab_dropped_to_pane("tab:0", pane2)
+        window.on_tab_dropped_to_pane(f"tab:0:{id(pane1)}", pane2)
         qtbot.wait(100)
         
         # Find the moved file's tab in pane2
@@ -4038,7 +4038,7 @@ class TestMoveTabModifiedState:
         qtbot.wait(50)
         
         # Move the tab from pane1 to pane2
-        window.on_tab_dropped_to_pane("tab:0", pane2)
+        window.on_tab_dropped_to_pane(f"tab:0:{id(pane1)}", pane2)
         qtbot.wait(100)
         
         # Find the moved file's tab in pane2
@@ -4126,7 +4126,7 @@ class TestDragTabWithMultipleTabs:
         print(f"open_files: {window.open_files}")
         
         # Simulate dragging tab at index 1 (file2) from pane1 to pane2
-        window.on_tab_dropped_to_pane("tab:1", pane2)
+        window.on_tab_dropped_to_pane(f"tab:1:{id(pane1)}", pane2)
         
         # Debug: print state after drag
         print(f"\nAfter drag:")
@@ -4141,3 +4141,288 @@ class TestDragTabWithMultipleTabs:
         # Verify the content is correct
         pane2_tabs_after = [pane2.tab_widget.tabText(i) for i in range(pane2.tab_widget.count())]
         assert any("file2.txt" in text for text in pane2_tabs_after), "file2 should be in pane2 after drag"
+
+
+class TestDragTabWithinSamePane:
+    """Test for dragging tabs within the same pane (reordering)."""
+
+    def test_drag_tab_within_same_pane_does_not_affect_other_panes(self, qtbot, tmp_path):
+        """Bug test: Dragging a tab within the same pane should not move tabs from other panes.
+        
+        This tests the scenario where:
+        - pane1 has tabs at indices 0, 1
+        - pane2 has tabs at indices 0, 1
+        - User drags tab 1 within pane1 (reordering)
+        - Bug: The code incorrectly finds pane2's tab at index 1 and moves it to pane1
+        """
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Create test files
+        file1 = tmp_path / "pane1_file1.txt"
+        file2 = tmp_path / "pane1_file2.txt"
+        file3 = tmp_path / "pane2_file1.txt"
+        file4 = tmp_path / "pane2_file2.txt"
+        
+        file1.write_text("pane1 content 1")
+        file2.write_text("pane1 content 2")
+        file3.write_text("pane2 content 1")
+        file4.write_text("pane2 content 2")
+        
+        # Load files into pane1 (the initial pane)
+        pane1 = window.active_pane
+        window.load_file(str(file1))
+        window.load_file(str(file2))
+        
+        # Create pane2 and load files into it
+        window.add_split_view()
+        pane2 = window.active_pane
+        window.load_file(str(file3))
+        window.load_file(str(file4))
+        
+        # Verify initial state
+        assert pane1.tab_widget.count() == 2, f"pane1 should have 2 tabs, has {pane1.tab_widget.count()}"
+        assert pane2.tab_widget.count() == 2, f"pane2 should have 2 tabs, has {pane2.tab_widget.count()}"
+        
+        pane1_tabs_before = [pane1.tab_widget.tabText(i) for i in range(pane1.tab_widget.count())]
+        pane2_tabs_before = [pane2.tab_widget.tabText(i) for i in range(pane2.tab_widget.count())]
+        
+        print(f"\nBefore reorder:")
+        print(f"pane1 tabs: {pane1_tabs_before}")
+        print(f"pane2 tabs: {pane2_tabs_before}")
+        
+        # Simulate dragging tab 1 within pane1 (same pane reorder)
+        # This should NOT affect pane2 at all
+        window.on_tab_dropped_to_pane(f"tab:1:{id(pane1)}", pane1)
+        qtbot.wait(100)
+        
+        pane1_tabs_after = [pane1.tab_widget.tabText(i) for i in range(pane1.tab_widget.count())]
+        pane2_tabs_after = [pane2.tab_widget.tabText(i) for i in range(pane2.tab_widget.count())]
+        
+        print(f"\nAfter reorder within pane1:")
+        print(f"pane1 tabs: {pane1_tabs_after}")
+        print(f"pane2 tabs: {pane2_tabs_after}")
+        
+        # pane2 should be completely unchanged
+        assert pane2.tab_widget.count() == 2, f"pane2 should still have 2 tabs, has {pane2.tab_widget.count()}"
+        assert pane2_tabs_after == pane2_tabs_before, f"pane2 tabs should be unchanged: {pane2_tabs_before} -> {pane2_tabs_after}"
+        
+        # pane1 should also be unchanged (reorder within same pane is a no-op for cross-pane logic)
+        assert pane1.tab_widget.count() == 2, f"pane1 should still have 2 tabs, has {pane1.tab_widget.count()}"
+
+
+class TestMoveLastTabClosesPane:
+    """Test that moving the last tab from a pane closes that pane."""
+
+    def test_moving_last_tab_closes_source_pane(self, qtbot, tmp_path):
+        """Bug test: When the last tab is moved from a pane, that pane should close."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Create test files
+        file1 = tmp_path / "file1.txt"
+        file2 = tmp_path / "file2.txt"
+        
+        file1.write_text("content 1")
+        file2.write_text("content 2")
+        
+        # Load file1 in pane1
+        pane1 = window.active_pane
+        window.load_file(str(file1))
+        
+        # Create pane2 and load file2
+        window.add_split_view()
+        pane2 = window.active_pane
+        window.load_file(str(file2))
+        
+        # Verify initial state: 2 panes
+        assert len(window.split_panes) == 2, f"Should have 2 panes, has {len(window.split_panes)}"
+        assert pane1.tab_widget.count() == 1, "pane1 should have 1 tab"
+        assert pane2.tab_widget.count() == 1, "pane2 should have 1 tab"
+        
+        # Move the only tab from pane2 to pane1
+        window.on_tab_dropped_to_pane(f"tab:0:{id(pane2)}", pane1)
+        qtbot.wait(100)
+        
+        # pane2 should now be closed since it has no tabs
+        assert len(window.split_panes) == 1, f"Should have 1 pane after moving last tab, has {len(window.split_panes)}"
+        assert pane1 in window.split_panes, "pane1 should still exist"
+        assert pane1.tab_widget.count() == 2, f"pane1 should have 2 tabs, has {pane1.tab_widget.count()}"
+
+
+class TestMultipleTabMoves:
+    """Test that multiple tab moves work correctly."""
+
+    def test_multiple_tab_moves_between_panes(self, qtbot, tmp_path):
+        """Bug test: Moving tabs multiple times should continue to work."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Create test files
+        files = []
+        for i in range(4):
+            f = tmp_path / f"file{i}.txt"
+            f.write_text(f"content {i}")
+            files.append(f)
+        
+        # Load files 0 and 1 in pane1
+        pane1 = window.active_pane
+        window.load_file(str(files[0]))
+        window.load_file(str(files[1]))
+        
+        # Create pane2 and load files 2 and 3
+        window.add_split_view()
+        pane2 = window.active_pane
+        window.load_file(str(files[2]))
+        window.load_file(str(files[3]))
+        
+        # Verify initial state
+        assert pane1.tab_widget.count() == 2, f"pane1 should have 2 tabs, has {pane1.tab_widget.count()}"
+        assert pane2.tab_widget.count() == 2, f"pane2 should have 2 tabs, has {pane2.tab_widget.count()}"
+        
+        def get_tab_names(pane):
+            return [pane.tab_widget.tabText(i) for i in range(pane.tab_widget.count())]
+        
+        print(f"\nInitial state:")
+        print(f"pane1: {get_tab_names(pane1)}")
+        print(f"pane2: {get_tab_names(pane2)}")
+        
+        # Move 1: Move file1.txt (index 1) from pane1 to pane2
+        print(f"\nMove 1: file1.txt from pane1 to pane2")
+        window.on_tab_dropped_to_pane(f"tab:1:{id(pane1)}", pane2)
+        qtbot.wait(50)
+        
+        assert pane1.tab_widget.count() == 1, f"After move 1, pane1 should have 1 tab, has {pane1.tab_widget.count()}"
+        assert pane2.tab_widget.count() == 3, f"After move 1, pane2 should have 3 tabs, has {pane2.tab_widget.count()}"
+        print(f"pane1: {get_tab_names(pane1)}")
+        print(f"pane2: {get_tab_names(pane2)}")
+        
+        # Move 2: Move file2.txt (index 0) from pane2 to pane1
+        print(f"\nMove 2: file2.txt from pane2 to pane1")
+        window.on_tab_dropped_to_pane(f"tab:0:{id(pane2)}", pane1)
+        qtbot.wait(50)
+        
+        assert pane1.tab_widget.count() == 2, f"After move 2, pane1 should have 2 tabs, has {pane1.tab_widget.count()}"
+        assert pane2.tab_widget.count() == 2, f"After move 2, pane2 should have 2 tabs, has {pane2.tab_widget.count()}"
+        print(f"pane1: {get_tab_names(pane1)}")
+        print(f"pane2: {get_tab_names(pane2)}")
+        
+        # Move 3: Move file3.txt (index 0) from pane2 to pane1
+        print(f"\nMove 3: file3.txt from pane2 to pane1")
+        window.on_tab_dropped_to_pane(f"tab:0:{id(pane2)}", pane1)
+        qtbot.wait(50)
+        
+        assert pane1.tab_widget.count() == 3, f"After move 3, pane1 should have 3 tabs, has {pane1.tab_widget.count()}"
+        assert pane2.tab_widget.count() == 1, f"After move 3, pane2 should have 1 tab, has {pane2.tab_widget.count()}"
+        print(f"pane1: {get_tab_names(pane1)}")
+        print(f"pane2: {get_tab_names(pane2)}")
+        
+        # Move 4: Move file0.txt (index 0) from pane1 to pane2
+        print(f"\nMove 4: file0.txt from pane1 to pane2")
+        window.on_tab_dropped_to_pane(f"tab:0:{id(pane1)}", pane2)
+        qtbot.wait(50)
+        
+        assert pane1.tab_widget.count() == 2, f"After move 4, pane1 should have 2 tabs, has {pane1.tab_widget.count()}"
+        assert pane2.tab_widget.count() == 2, f"After move 4, pane2 should have 2 tabs, has {pane2.tab_widget.count()}"
+        print(f"pane1: {get_tab_names(pane1)}")
+        print(f"pane2: {get_tab_names(pane2)}")
+
+    def test_stress_test_many_tab_moves(self, qtbot, tmp_path):
+        """Stress test: Perform 25+ tab moves to ensure stability."""
+        import random
+        random.seed(42)  # For reproducibility
+        
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        # Create 6 test files
+        files = []
+        for i in range(6):
+            f = tmp_path / f"file{i}.txt"
+            f.write_text(f"content {i}")
+            files.append(f)
+        
+        # Load files 0, 1, 2 in pane1
+        pane1 = window.active_pane
+        window.load_file(str(files[0]))
+        window.load_file(str(files[1]))
+        window.load_file(str(files[2]))
+        
+        # Create pane2 and load files 3, 4, 5
+        window.add_split_view()
+        pane2 = window.active_pane
+        window.load_file(str(files[3]))
+        window.load_file(str(files[4]))
+        window.load_file(str(files[5]))
+        
+        def get_tab_names(pane):
+            return [pane.tab_widget.tabText(i) for i in range(pane.tab_widget.count())]
+        
+        def get_total_tabs():
+            return pane1.tab_widget.count() + pane2.tab_widget.count()
+        
+        # Verify initial state
+        assert pane1.tab_widget.count() == 3
+        assert pane2.tab_widget.count() == 3
+        initial_total = get_total_tabs()
+        
+        print(f"\nInitial: pane1={get_tab_names(pane1)}, pane2={get_tab_names(pane2)}")
+        
+        # Perform 25 random moves
+        for move_num in range(1, 26):
+            # Pick source and dest panes
+            if pane1.tab_widget.count() == 0:
+                source, dest = pane2, pane1
+            elif pane2.tab_widget.count() == 0:
+                source, dest = pane1, pane2
+            else:
+                # Random choice, but ensure we don't empty a pane to keep test interesting
+                if pane1.tab_widget.count() == 1:
+                    source, dest = pane2, pane1
+                elif pane2.tab_widget.count() == 1:
+                    source, dest = pane1, pane2
+                else:
+                    if random.choice([True, False]):
+                        source, dest = pane1, pane2
+                    else:
+                        source, dest = pane2, pane1
+            
+            # Pick random tab index from source
+            tab_index = random.randint(0, source.tab_widget.count() - 1)
+            tab_name = source.tab_widget.tabText(tab_index)
+            
+            source_count_before = source.tab_widget.count()
+            dest_count_before = dest.tab_widget.count()
+            
+            # Perform the move
+            window.on_tab_dropped_to_pane(f"tab:{tab_index}:{id(source)}", dest)
+            qtbot.wait(10)
+            
+            # Verify counts changed correctly
+            assert source.tab_widget.count() == source_count_before - 1, \
+                f"Move {move_num}: source should have {source_count_before - 1} tabs, has {source.tab_widget.count()}"
+            assert dest.tab_widget.count() == dest_count_before + 1, \
+                f"Move {move_num}: dest should have {dest_count_before + 1} tabs, has {dest.tab_widget.count()}"
+            
+            # Verify total tabs unchanged
+            assert get_total_tabs() == initial_total, \
+                f"Move {move_num}: total tabs should be {initial_total}, is {get_total_tabs()}"
+            
+            # Verify moved tab is in dest
+            dest_tabs = get_tab_names(dest)
+            assert any(tab_name in t for t in dest_tabs), \
+                f"Move {move_num}: {tab_name} should be in dest but dest has {dest_tabs}"
+            
+            if move_num % 5 == 0:
+                print(f"Move {move_num}: pane1={get_tab_names(pane1)}, pane2={get_tab_names(pane2)}")
+        
+        print(f"\nFinal: pane1={get_tab_names(pane1)}, pane2={get_tab_names(pane2)}")
+        print("All 25 moves completed successfully!")

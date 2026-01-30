@@ -4703,3 +4703,217 @@ class TestSplitButtonTooltipOnClick:
         
         # Tooltip should be hidden after leave
         assert not custom_tooltip.isVisible(), "Custom tooltip should be hidden after mouse leave"
+
+
+class TestFontFunctionality:
+    """Tests for font selection, size, and color functionality."""
+
+    def test_format_menu_exists(self, qtbot):
+        """Test that Format menu exists with font options."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        menubar = window.menuBar()
+        
+        format_menu = None
+        for action in menubar.actions():
+            if "ormat" in action.text():
+                format_menu = action.menu()
+                break
+        
+        assert format_menu is not None
+        action_texts = [a.text() for a in format_menu.actions()]
+        assert any("Font" in t for t in action_texts)
+        assert any("Size" in t for t in action_texts)
+        assert any("Color" in t for t in action_texts)
+
+    def test_set_editor_font_family(self, qtbot):
+        """Test setting font family for all editors."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        window.set_editor_font_family("Arial")
+        
+        assert window.editor.font().family() == "Arial"
+
+    def test_set_editor_font_family_multiple_tabs(self, qtbot):
+        """Test setting font family applies to all open tabs."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        window.create_new_tab()
+        window.create_new_tab()
+        
+        window.set_editor_font_family("Courier New")
+        
+        for i in range(window.tab_widget.count()):
+            editor = window.tab_widget.widget(i)
+            assert editor.font().family() == "Courier New"
+
+    def test_set_editor_font_size(self, qtbot):
+        """Test setting font size for all editors."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        window.set_editor_font_size(16)
+        
+        assert window.editor.font().pointSize() == 16
+
+    def test_set_editor_font_size_multiple_tabs(self, qtbot):
+        """Test setting font size applies to all open tabs."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        window.create_new_tab()
+        window.create_new_tab()
+        
+        window.set_editor_font_size(14)
+        
+        for i in range(window.tab_widget.count()):
+            editor = window.tab_widget.widget(i)
+            assert editor.font().pointSize() == 14
+
+    def test_set_editor_font_color(self, qtbot):
+        """Test setting font color for all editors."""
+        from PySide6.QtGui import QColor
+        
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        red_color = QColor(255, 0, 0)
+        window.set_editor_font_color(red_color)
+        
+        editor_color = window.editor.get_text_color()
+        assert editor_color.red() == 255
+        assert editor_color.green() == 0
+        assert editor_color.blue() == 0
+
+    def test_set_editor_font_color_multiple_tabs(self, qtbot):
+        """Test setting font color applies to all open tabs."""
+        from PySide6.QtGui import QColor
+        
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        window.create_new_tab()
+        
+        green_color = QColor(0, 255, 0)
+        window.set_editor_font_color(green_color)
+        
+        for i in range(window.tab_widget.count()):
+            editor = window.tab_widget.widget(i)
+            editor_color = editor.get_text_color()
+            assert editor_color.green() == 255
+
+    def test_font_dialog_cancelled(self, qtbot, monkeypatch):
+        """Test that cancelling font dialog does not change font."""
+        from PySide6.QtWidgets import QDialog
+        
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        original_font = window.editor.font().family()
+        
+        monkeypatch.setattr(
+            "main.FontSelectionDialog.exec",
+            lambda self: QDialog.Rejected
+        )
+        
+        window.show_font_dialog()
+        
+        assert window.editor.font().family() == original_font
+
+    def test_font_size_dialog_cancelled(self, qtbot, monkeypatch):
+        """Test that cancelling font size dialog does not change size."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        original_size = window.editor.font().pointSize()
+        
+        monkeypatch.setattr(
+            "main.QInputDialog.getInt",
+            lambda *args, **kwargs: (20, False)
+        )
+        
+        window.show_font_size_dialog()
+        
+        assert window.editor.font().pointSize() == original_size
+
+    def test_font_color_dialog_cancelled(self, qtbot, monkeypatch):
+        """Test that cancelling font color dialog does not change color."""
+        from PySide6.QtGui import QColor
+        
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        original_color = window.editor.get_text_color()
+        
+        monkeypatch.setattr(
+            "main.QColorDialog.getColor",
+            lambda *args, **kwargs: QColor()
+        )
+        
+        window.show_font_color_dialog()
+        
+        current_color = window.editor.get_text_color()
+        assert current_color == original_color
+
+    def test_font_change_updates_tab_stop_distance(self, qtbot):
+        """Test that changing font updates tab stop distance."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        original_tab_distance = window.editor.tabStopDistance()
+        
+        window.set_editor_font_family("Courier New")
+        
+        new_tab_distance = window.editor.tabStopDistance()
+        assert new_tab_distance > 0
+
+    def test_font_size_shows_zoom_indicator(self, qtbot):
+        """Test that changing font size shows zoom indicator."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        window.set_editor_font_size(14)
+        
+        assert window.zoom_indicator.isVisible()
+
+    def test_font_applies_to_split_panes(self, qtbot):
+        """Test that font changes apply to editors in split panes."""
+        window = TextEditor()
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        
+        window.add_split_view()
+        
+        assert len(window.split_panes) == 2
+        
+        window.set_editor_font_family("Verdana")
+        
+        for pane in window.split_panes:
+            for i in range(pane.tab_widget.count()):
+                editor = pane.tab_widget.widget(i)
+                assert editor.font().family() == "Verdana"
